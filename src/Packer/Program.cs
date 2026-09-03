@@ -1,124 +1,108 @@
-﻿using Serilog;
+﻿using Packer.Extensions;
+using Packer.Helpers;
+using Packer.Models;
+using Packer.Models.Providers;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
-using Formatter;
-using static Packer.Utils;
 
 namespace Packer
 {
     class Program
     {
-        static async Task Main(string[] args)
+        // System.CommandLine.DragonFruit支持
+        public static async Task Main(string version, bool increment = false, bool grouped = false, bool flattened = false)
         {
             Log.Logger = new LoggerConfiguration()
-                .Enrich.FromLogContext()
-                .WriteTo.Console()
-                .CreateLogger();
-            var hashmap = await Util.ReadReplaceFontMap();
-            var config = RetrieveConfig();
-            if (config.Version == "1.12.2")
-            {
-                await Util.ReplaceFontInLang(config.Version, hashmap);
-            }
-            else
-            {
-                await Util.ReplaceFontInJson(config.Version, hashmap);
-            }
-            Log.Information("开始打包。版本：{0}", config.Version);
-            using var stream = File.Create(".\\Minecraft-Mod-Language-Package.zip"); // 生成空 zip 文档
-            using var archive = new ZipArchive(stream, ZipArchiveMode.Update);
-            InitializeArchive(archive, config);
-            var existingDomains = new Dictionary<string, string>();
-            var assetsToBePacked = new DirectoryInfo($".\\projects\\{config.Version}\\assets")
-                .EnumerateDirectories()
-                .SelectMany(_ => _.GetDirectories()
-                    .Select(descend => new
-                    {
-                        domainName = descend.Name,
-                        name = _.Name,
-                        assetPath = descend,
-                        prefixLength = _.FullName.Length
-                    })
-                );
-            foreach (var asset in assetsToBePacked)
-            {
-                if (asset is null)
-                {
-                    continue;
-                }
-                var domain = asset.domainName;
-                var name = asset.name;
-                if (config.ModBlackList.Contains(name))
-                {
-                    Log.Information("跳过了黑名单中的 mod：{0}（asset-domain：{1}", name, domain);
-                    continue;
-                }
-                if (config.DomainBlackList.Contains(domain))
-                {
-                    Log.Information("跳过了黑名单中的 asset-domain：{0}（对应 mod：{1}）", domain, name);
-                    continue;
-                }
-                Log.Information("正在打包 {0}（asset-domain：{1}）", name, domain);
-                if (existingDomains.ContainsKey(domain))
-                {
-                    Log.Warning("检测到 asset-domain 与 {0} 重合", existingDomains[domain]);
-                    foreach (var file in asset.assetPath.EnumerateFiles("*", SearchOption.AllDirectories))
-                    {
-                        if (file.FullName.Contains("en_us", StringComparison.OrdinalIgnoreCase))
-                        {
-                            Log.Information("跳过了英文原文：{0}", file.FullName[(asset.prefixLength + 1)..]);
-                            continue;
-                        }
-                        var destinationPath = $"assets\\{file.FullName[(asset.prefixLength + 1)..]}"
-                            .Replace("zh_CN", "zh_cn") // 修复大小写
-                            .Replace('\\', '/'); // 修复 Java 平台读取 CentralDirectory 部分时正反斜杠的问题
-                        var existingFile = archive.GetEntry(destinationPath);
-                        if (existingFile is null) // null 代表没有找到文件，也就是该文件没有重合
-                        {
-                            archive.CreateEntryFromFile(file.FullName, destinationPath);
-                            Log.Information("添加了暂未重合的 {0}", destinationPath);
-                        }
-                        else
-                        {
-                            Log.Warning("检测到重合文件：{0}", destinationPath);
-                            using var reader = File.OpenRead(file.FullName);
-                            using var writer = existingFile.Open();
-                            CombineLangFiles(writer, reader, file.Extension);
-                            Log.Information("完成合并");
-                        }
-                    }
-                }
-                else
-                {
-                    foreach (var file in asset.assetPath.EnumerateFiles("*", SearchOption.AllDirectories))
-                    {
-                        if (file.FullName.Contains("en_us", StringComparison.OrdinalIgnoreCase))
-                        {
-                            Log.Information("跳过了英文原文：{0}", file.FullName[(asset.prefixLength + 1)..]);
-                            continue;
-                        }
-                        var destinationPath = $"assets\\{file.FullName[(asset.prefixLength + 1)..]}"
-                            .Replace("zh_CN", "zh_cn") // 修复大小写
-                            .Replace('\\', '/'); // 修复 Java 平台读取 CentralDirectory 部分时正反斜杠的问题
-                        archive.CreateEntryFromFile(file.FullName, destinationPath);
-                        Log.Information("添加了 {0}", destinationPath);
-                    }
-                    Log.Information("向 asset-domain 映射表中加入：{0} -> {1}", domain, name);
-                    existingDomains.Add(domain, name);
-                }
-            }
-            Log.Information("打包结束");
-        }
+             .Enrich.FromLogContext()
+             .WriteTo.Console()
+             .MinimumLevel.Debug()
+             .CreateLogger();
 
-        static Config RetrieveConfig()
-        {
-            var reader = File.ReadAllBytes(".\\config\\packer.json");
-            return JsonSerializer.Deserialize<Config>(reader);
+            var config = ConfigHelpers.RetrieveConfig(configTemplate: "./config/packer/{0}.json",
+                                                      version: version);
+            Log.Information("开始对版本 {0} 的打包", config.Base.Version);
+
+            var targetModIdentifiers = increment ? GitHelpers.EnumerateChangedMods(config.Base.Version)
+                : Enumerable.Empty<string>();
+
+            
+
+            
+
+
+            IEnumerable<IResourceFileProvider> initialFiles = [
+                new RawFile(new FileInfo("./projects/templates/pack.png"), "pack.png"),
+                TextFile.Create(new FileInfo("./projects/templates/LICENSE"), "LICENSE"),
+                TextFile.CreateFromTemplate(new FileInfo(config.Base.ReadmeTemplate),
+                    "README.txt",
+                    config.Base.ReadmeParameters),
+                TextFile.CreateFromTemplate(new FileInfo(config.Base.McMetaTemplate),
+                    "pack.mcmeta",
+                    [DateTime.UtcNow.AddHours(8), .. config.Base.McMetaParameters])
+                ];
+
+            if (flattened)
+            {
+                string packName = $"./Minecraft-Mod-Language-Modpack-{version}.zip";
+                Log.Information("直出资源包：{0}", packName);
+                var query =
+                    EnumerationHelper.EnumerateUnmerged(targetModIdentifiers, config, [config.Base.Version])
+                    .MergeDeep()
+                    .PostProcess(config);
+
+                await using var stream = File.Create(packName);
+
+                using (var archive = new ZipArchive(stream, ZipArchiveMode.Update, leaveOpen: true))
+                {
+                    await archive.WriteDirect(initialFiles);
+                    await archive.WriteDirect(query);
+                }
+                var md5 = stream.ComputeMD5();
+
+                Log.Information("打包文件的 MD5 值：{0}", md5);
+                File.WriteAllText($"./{version}.md5", md5);
+            }
+
+            if (grouped)
+            {
+                string packName = $"./Minecraft-Mod-Language-Modpack-{config.Base.Version}-namespaced.zip";
+                Log.Information("组合包：{0}", packName);
+
+                var acceptableVersions = config.Base.FallbackVersions.Prepend(config.Base.Version).ToList();
+                var targetPlatform = PackTargetPlatform.FromPackVersion(config.Base.Version);
+                var applicableDiscriminators = ConfigHelpers.RetrieveNamespaceDiscriminators()
+                    .Where(discriminator => discriminator.AppliesTo(targetPlatform))
+                    .ToList();
+                Log.Information("目标平台 {0} {1}，适用的命名空间区分规则：{2} 条",
+                                targetPlatform.Loader, targetPlatform.GameVersion, applicableDiscriminators.Count);
+
+                var query =
+                    EnumerationHelper.EnumerateUnmerged(targetModIdentifiers, config, acceptableVersions, applicableDiscriminators)
+                    .MergeDeep()
+                    .PostProcess(config);
+
+                var manifestFile = ManifestHelpers.BuildGroupedPackManifest(config, applicableDiscriminators, [config.Base.Version]);
+
+                await using var stream = File.Create(packName);
+
+                using (var archive = new ZipArchive(stream, ZipArchiveMode.Update, leaveOpen: true))
+                {
+                    await archive.WriteDirect(initialFiles);
+                    await archive.WriteDirect([manifestFile]);
+                    await archive.WriteGrouped(query);
+                }
+                //var md5 = stream.ComputeMD5();
+
+                //Log.Information("打包文件的 MD5 值：{0}", md5);
+                //File.WriteAllText($"./{config.Base.Version}.md5", md5);
+            }
+
+            Log.Information("对版本 {0} 的打包结束。", version);
         }
     }
 }

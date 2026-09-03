@@ -1,0 +1,13 @@
+[
+    {
+        "type": "direct"
+    },
+    {
+        "type": "indirect",
+        "source": "projects/assets/example-indirect/packer-example/indirect"
+    },
+    {
+        "type": "indirect",
+        "source": "projects/assets/example-composition/packer-example/composition"
+    }
+]

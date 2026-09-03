@@ -1,0 +1,7 @@
+[
+    {
+        "type": "composition",
+        "destType": "json",
+        "source": "projects/assets/example-composition/packer-example/composition/compositions/zh_cn.json-composition.json"
+    }
+]

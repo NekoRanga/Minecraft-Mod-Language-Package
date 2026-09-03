@@ -2,16 +2,18 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AnalysisLevel>none</AnalysisLevel>
+    <PublishSingleFile>true</PublishSingleFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Serilog" Version="2.10.0" />
-    <PackageReference Include="Serilog.Sinks.Console" Version="4.0.0-dev-00839" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\Formatter\Formatter.csproj" />
+    <PackageReference Include="LibGit2Sharp" Version="0.31.0" />
+    <PackageReference Include="Serilog" Version="4.3.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="SharpCompress" Version="0.49.1" />
+    <PackageReference Include="System.CommandLine.DragonFruit" Version="0.3.0-alpha.21216.1" />
   </ItemGroup>
 
 </Project>
